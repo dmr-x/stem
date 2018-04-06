@@ -1265,8 +1265,7 @@ class Controller(BaseController):
     """
     get_exit_policy(default = UNDEFINED)
 
-    Effective ExitPolicy for our relay. This accounts for
-    ExitPolicyRejectPrivate and default policies.
+    Effective ExitPolicy for our relay.
 
     :param object default: response if the query fails
 
@@ -1280,24 +1279,15 @@ class Controller(BaseController):
       An exception is only raised if we weren't provided a default response.
     """
 
-    with self._msg_lock:
-      config_policy = self._get_cache('exit_policy')
+    exit_policy = self._get_cache('exit_policy')
 
-      if not config_policy:
-        policy = []
+    if not exit_policy:
+      policy_rules = self.get_info('exit-policy/full').split('\n')
 
-        if self.get_conf('ExitPolicyRejectPrivate') == '1':
-          policy.append('reject private:*')
+      exit_policy = stem.exit_policy.ExitPolicy(*policy_rules)
+      self._set_cache({'exit_policy': exit_policy})
 
-        for policy_line in self.get_conf('ExitPolicy', multiple = True):
-          policy += policy_line.split(',')
-
-        policy += self.get_info('exit-policy/default').split(',')
-
-        config_policy = stem.exit_policy.get_config_policy(policy, self.get_info('address', None))
-        self._set_cache({'exit_policy': config_policy})
-
-      return config_policy
+    return exit_policy
 
   @with_default()
   def get_ports(self, listener_type, default = UNDEFINED):

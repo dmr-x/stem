@@ -270,11 +270,23 @@ class TestController(unittest.TestCase):
   @test.require.controller
   def test_get_exit_policy(self):
     """
+    Test for get_exit_policy() of a non-exit relay.
+    """
+
+    expected_nonexit_policy = ExitPolicy('reject *:*')
+
+    runner = test.runner.get_runner()
+    with runner.get_tor_controller() as controller:
+      self.assertEquals(expected_nonexit_policy, controller.get_exit_policy())
+
+  @test.require.controller
+  def test_get_exit_policy_default(self):
+    """
     Sanity test for get_exit_policy(). We have the default policy (no
     ExitPolicy set) which is a little... long due to the boilerplate.
     """
 
-    expected = ExitPolicy(
+    expected_exit_policy = ExitPolicy(
       'reject 0.0.0.0/8:*',
       'reject 169.254.0.0/16:*',
       'reject 127.0.0.0/8:*',
@@ -295,20 +307,38 @@ class TestController(unittest.TestCase):
       'accept *:*',
     )
 
-    runner = test.runner.get_runner()
-
-    with runner.get_tor_controller() as controller:
+    def compare_exit_policy(expected, actual):
       # We can't simply compare the policies because the tor policy may or may
       # not have a reject entry for our public address. Hence, stripping it
       # from the policy's string, then comparing those.
-
-      policy_str = str(controller.get_exit_policy())
+      policy_str = str(actual)
 
       public_addr_start = policy_str.find('reject 172.16.0.0/12:*') + 22
       public_addr_end = policy_str.find(', reject *:25')
 
       policy_str = policy_str[:public_addr_start] + policy_str[public_addr_end:]
       self.assertEqual(str(expected), policy_str)
+
+    runner = test.runner.get_runner()
+    with runner.get_tor_controller() as controller:
+      # we must first transition our tor process into an exit relay
+      # save conf for reverting
+      oldconf = runner.get_torrc_contents()
+
+      try:
+        # transition to an explicit ExitRelay
+        torrc_options_exit_explicit = {
+          'OrPort': '9090',
+          'ExitRelay': '1',
+          'ExitPolicy': None,
+          'DisableNetwork': '1',  # DisableNetwork ensures no port is actually opened
+        }
+        controller.set_options(torrc_options_exit_explicit)
+        compare_exit_policy(expected_exit_policy, controller.get_exit_policy())
+      finally:
+        # reload original config
+        controller.load_conf(oldconf)
+        controller.reset_conf('__OwningControllerProcess')
 
   @test.require.controller
   def test_authenticate(self):

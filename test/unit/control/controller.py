@@ -152,34 +152,20 @@ class TestControl(unittest.TestCase):
       self.controller._is_caching_enabled = True
 
   @patch('stem.control.Controller.get_info')
-  @patch('stem.control.Controller.get_conf')
-  def test_get_exit_policy(self, get_conf_mock, get_info_mock):
+  def test_get_exit_policy(self, get_info_mock):
     """
     Exercises the get_exit_policy() method.
     """
 
-    get_conf_mock.side_effect = lambda param, **kwargs: {
-      'ExitPolicyRejectPrivate': '1',
-      'ExitPolicy': ['accept *:80,   accept *:443', 'accept 43.5.5.5,reject *:22'],
-    }[param]
-
-    get_info_mock.side_effect = lambda param, default = None: {
-      'address': '123.45.67.89',
-      'exit-policy/default': 'reject *:25,reject *:119,reject *:135-139,reject *:445,reject *:563,reject *:1214,reject *:4661-4666,reject *:6346-6429,reject *:6699,reject *:6881-6999,accept *:*',
-    }[param]
-
-    expected = ExitPolicy(
-      'reject 0.0.0.0/8:*',  # private entries
+    # the policy here is fairly arbitrary, but let's represent the default exit-policy if ExitPolicyRejectPrivate is 1 (default) and our address is 123.45.67.89
+    policy_rule_strings = [
+      'reject 0.0.0.0/8:*',  # private entries from ExitPolicyRejectPrivate 1 (default)
       'reject 169.254.0.0/16:*',
       'reject 127.0.0.0/8:*',
       'reject 192.168.0.0/16:*',
       'reject 10.0.0.0/8:*',
       'reject 172.16.0.0/12:*',
       'reject 123.45.67.89:*',  # relay's public address
-      'accept *:80',  # finally we get to our ExitPolicy
-      'accept *:443',
-      'accept 43.5.5.5:*',
-      'reject *:22',
       'reject *:25',  # default policy
       'reject *:119',
       'reject *:135-139',
@@ -191,7 +177,13 @@ class TestControl(unittest.TestCase):
       'reject *:6699',
       'reject *:6881-6999',
       'accept *:*',
-    )
+    ]
+
+    get_info_mock.side_effect = lambda param, default = None: {
+      'exit-policy/full': '\n'.join(policy_rule_strings),
+    }[param]
+
+    expected = ExitPolicy(*policy_rule_strings)
 
     self.assertEqual(expected, self.controller.get_exit_policy())
 
