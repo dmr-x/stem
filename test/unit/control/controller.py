@@ -157,8 +157,9 @@ class TestControl(unittest.TestCase):
     Exercises the get_exit_policy() method.
     """
 
-    # the policy here is fairly arbitrary, but let's represent the default exit-policy if ExitPolicyRejectPrivate is 1 (default) and our address is 123.45.67.89
+    # the policy here is fairly arbitrary, but let's represent the default exit-policy if IPv6Exit is 0 (default), ExitPolicyRejectPrivate is 1 (default), and our address is 123.45.67.89
     policy_rule_strings = [
+      'reject6 *:*',  # entry from IPv6Exit 0 (default)
       'reject 0.0.0.0/8:*',  # private entries from ExitPolicyRejectPrivate 1 (default)
       'reject 169.254.0.0/16:*',
       'reject 127.0.0.0/8:*',

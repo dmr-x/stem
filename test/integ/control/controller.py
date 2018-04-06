@@ -287,6 +287,7 @@ class TestController(unittest.TestCase):
     """
 
     expected_exit_policy = ExitPolicy(
+      'reject6 *:*',
       'reject 0.0.0.0/8:*',
       'reject 169.254.0.0/16:*',
       'reject 127.0.0.0/8:*',
