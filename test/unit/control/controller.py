@@ -32,8 +32,24 @@ class TestControl(unittest.TestCase):
   def setUp(self):
     socket = stem.socket.ControlSocket()
 
-    with patch('stem.control.Controller.add_event_listener', Mock()):
+    self._init_event_listeners = {}
+
+    def save_listener(listener, *event_types):
+      for event_type in event_types:
+        self._init_event_listeners.setdefault(event_type, []).append(listener)
+
+    with patch('stem.control.Controller.add_event_listener', Mock(side_effect=save_listener)):
       self.controller = Controller(socket)
+
+  def get_init_event_listeners(self, event_type):
+    """
+    Return the event listeners that Controller.__init__() sets up.
+
+    We mock out the Controller.add_event_listener() method during our setUp(),
+    so these are not automatically invoked during unit tests.
+    """
+
+    return list(self._init_event_listeners.get(event_type, []))
 
   def test_event_description(self):
     self.assertEqual("Logging at the debug runlevel. This is low level, high volume information about tor's internals that generally isn't useful to users.", stem.control.event_description('DEBUG'))
@@ -221,8 +237,21 @@ class TestControl(unittest.TestCase):
     exit_policy_return = 'accept *:*'
     expected = ExitPolicy(exit_policy_return)
     actual = self.controller.get_exit_policy()
-    self.assertEqual(expected, actual, 'should clear cache')
+    self.assertEqual(expected, actual, 'set_conf should clear cache')
     self.assertEqual(2, get_info_mock.call_count, 'should call get_info again')
+
+    # test setUp() mocks out add_event_listener, so test must call the event handler directly
+    self.assertEqual(self.controller._event_listeners, {}, 'test assumption failed')  # validate the comment above
+
+    # handling the event should clear the cache
+    exit_policy_changed_event = ControlMessage.from_str("650-CONF_CHANGED\n650-ExitPolicy\n650 OK", 'EVENT', normalize = True)
+    for listener in self.get_init_event_listeners(EventType.CONF_CHANGED):
+      listener(exit_policy_changed_event)
+    exit_policy_return = 'accept *:80'  # doesn't jive exactly with the event, but doesn't have to for the test
+    expected = ExitPolicy(exit_policy_return)
+    actual = self.controller.get_exit_policy()
+    self.assertEqual(expected, actual, 'handling CONF_CHANGED ExitPolicy event should clear cache')
+    self.assertEqual(3, get_info_mock.call_count, 'should call get_info again')
 
   @patch('stem.control.Controller.get_info')
   @patch('stem.control.Controller.get_conf')

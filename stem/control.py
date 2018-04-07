@@ -1072,8 +1072,8 @@ class Controller(BaseController):
       if self.is_caching_enabled():
         self._set_cache(dict((k, None) for k in event.config), 'getconf')
 
-        if 'exitpolicy' in event.config.keys():
-          self._set_cache({'exitpolicy': None})
+        if 'exitpolicy' in [k.lower() for k in event.config.keys()]:
+          self._set_cache({'exit_policy': None})
 
     self.add_event_listener(_confchanged_listener, EventType.CONF_CHANGED)
 
