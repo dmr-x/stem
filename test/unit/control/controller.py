@@ -188,6 +188,42 @@ class TestControl(unittest.TestCase):
 
     self.assertEqual(expected, self.controller.get_exit_policy())
 
+  @patch('stem.control.Controller.msg')
+  @patch('stem.control.Controller.get_info')
+  def test_get_exit_policy_caching(self, get_info_mock, msg_mock):
+    """
+    Exercises the get_exit_policy() method, checking cache behavior
+    """
+
+    # return closure - variable will be changed
+    exit_policy_return = None
+    get_info_mock.side_effect = lambda param, default = None: {
+      'exit-policy/full': exit_policy_return,
+    }[param]
+
+    # cold cache
+    exit_policy_return = 'reject *:*'
+    expected = ExitPolicy(exit_policy_return)
+    actual = self.controller.get_exit_policy()
+    self.assertEqual(expected, actual, 'cold cache')
+    self.assertEqual(1, get_info_mock.call_count, 'cold cache count')
+
+    # check that cache is hit - no get_info call
+    actual = self.controller.get_exit_policy()
+    self.assertEqual(expected, actual, 'should not change')
+    self.assertEqual(1, get_info_mock.call_count, 'should hit cache')
+
+    # OK response for set_conf()
+    msg_mock.return_value = ControlMessage.from_str('250 OK\r\n', 'SINGLELINE')
+
+    # set_conf() should clear the cache
+    self.controller.set_conf('ExitPolicy', "doesn't matter, msg mocked")
+    exit_policy_return = 'accept *:*'
+    expected = ExitPolicy(exit_policy_return)
+    actual = self.controller.get_exit_policy()
+    self.assertEqual(expected, actual, 'should clear cache')
+    self.assertEqual(2, get_info_mock.call_count, 'should call get_info again')
+
   @patch('stem.control.Controller.get_info')
   @patch('stem.control.Controller.get_conf')
   def test_get_ports(self, get_conf_mock, get_info_mock):
