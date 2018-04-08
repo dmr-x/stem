@@ -2,6 +2,7 @@
 Integration tests for the stem.control.Controller class.
 """
 
+from contextlib import contextmanager
 import os
 import shutil
 import socket
@@ -32,6 +33,53 @@ from stem.version import Requirement
 # used for a few tests that need to look up a relay.
 
 TEST_ROUTER_STATUS_ENTRY = None
+
+
+@contextmanager
+def attached_event_listener(controller, listener, *event_types):
+  """
+  A context manager to simplify add/remove of an event listener
+  """
+
+  controller.add_event_listener(listener, *event_types)
+  yield
+  controller.remove_event_listener(listener)
+
+
+@contextmanager
+def do_then_wait_for_event(controller, timeout, event_type, error_on_timeout=True, cond=None):
+  """
+  A context manager to simplify running code that should generate an event,
+  then blocking until that event is generated
+
+  :param stem.control.Controller controller: controller to operate on
+  :param float timeout: maximum seconds to wait for the event
+  :param stem.control.EventType event_type: event type to register a
+    listener for
+  :param bool error_on_timeout: determines whether an **AssertionError**
+    is to be raised if the timeout is reached
+  :param function cond: optional predicate to wait for
+    should return **True** for an event that satisfies
+
+  :raises: **AssertionError** if timeout is reached without a valid event
+    if error_on_timeout is **True** (default)
+  """
+
+  # TODO: in theory we could support *event_types instead of event_type, but handling keyword args and varargs in python2 is tedious and unintuitive; change when python2 support is dropped
+
+  event_notice = threading.Event()
+
+  def listener(event):
+    if not cond or cond(event):
+      event_notice.set()
+
+  with attached_event_listener(controller, listener, event_type):
+    # do nothing until after the contextual code block
+    yield
+    # now block on the event
+    flag = event_notice.wait(timeout)
+    if error_on_timeout and not flag:
+      raise AssertionError('expected event(s), but timeout reached')
 
 
 class TestController(unittest.TestCase):
@@ -314,6 +362,7 @@ class TestController(unittest.TestCase):
       'reject *:6881-6999',
       'accept *:*',
     )
+    expected_nonexit_policy = ExitPolicy('reject *:*')
 
     def compare_exit_policy(expected, actual):
       # We can't simply compare the policies because the tor policy may or may
@@ -346,7 +395,21 @@ class TestController(unittest.TestCase):
           'ExitPolicy': None,
           'DisableNetwork': '1',  # DisableNetwork ensures no port is actually opened
         }
-        controller.set_options(torrc_options_exit_explicit)
+        with do_then_wait_for_event(controller, 0.1, EventType.CONF_CHANGED):
+          controller.set_options(torrc_options_exit_explicit)
+        compare_exit_policy(expected_exit_policy, controller.get_exit_policy())
+
+        # transition back to a non-exit, for added transition test
+        with do_then_wait_for_event(controller, 0.1, EventType.CONF_CHANGED):
+          controller.load_conf(oldconf)
+          controller.reset_conf('__OwningControllerProcess')
+        self.assertEquals(expected_nonexit_policy, controller.get_exit_policy())
+
+        # transition to an 'auto' ExitRelay
+        torrc_options_exit_auto = torrc_options_exit_explicit.copy()
+        torrc_options_exit_auto['ExitRelay'] = 'auto'
+        with do_then_wait_for_event(controller, 0.1, EventType.CONF_CHANGED):
+          controller.set_options(torrc_options_exit_auto)
         compare_exit_policy(expected_exit_policy, controller.get_exit_policy())
       finally:
         # reload original config

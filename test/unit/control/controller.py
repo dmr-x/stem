@@ -241,27 +241,33 @@ class TestControl(unittest.TestCase):
     self.assertEqual(expected_get_info_call_count, get_info_mock.call_count, 'should hit cache')
 
     # check cache-clearing behavior for conf changes
-    conf_key = 'ExitPolicy'
+    conf_keys_that_should_clear_cache = (
+      'ExitRelay',
+      'ExitPolicy',
+      'ExitPolicyRejectPrivate',
+      'ExitPolicyRejectLocalInterfaces',
+      'IPv6Exit',
+    )
+    for conf_key in conf_keys_that_should_clear_cache:
+      # set_conf() should clear the cache
+      self.controller.set_conf(conf_key, "doesn't matter, msg mocked")
+      exit_policy_return = 'accept *:*'
+      expected = ExitPolicy(exit_policy_return)
+      actual = self.controller.get_exit_policy()
+      self.assertEqual(expected, actual, 'set_conf %s should clear cache' % conf_key)
+      expected_get_info_call_count += 1
+      self.assertEqual(expected_get_info_call_count, get_info_mock.call_count, 'should call get_info again')
 
-    # set_conf() should clear the cache
-    self.controller.set_conf(conf_key, "doesn't matter, msg mocked")
-    exit_policy_return = 'accept *:*'
-    expected = ExitPolicy(exit_policy_return)
-    actual = self.controller.get_exit_policy()
-    self.assertEqual(expected, actual, 'set_conf should clear cache')
-    expected_get_info_call_count += 1
-    self.assertEqual(expected_get_info_call_count, get_info_mock.call_count, 'should call get_info again')
-
-    # handling the event should clear the cache
-    exit_policy_changed_event = ControlMessage.from_str("650-CONF_CHANGED\n650-%s\n650 OK" % conf_key, 'EVENT', normalize = True)
-    for listener in self.get_init_event_listeners(EventType.CONF_CHANGED):
-      listener(exit_policy_changed_event)
-    exit_policy_return = 'accept *:80'  # doesn't jive exactly with the event, but doesn't have to for the test
-    expected = ExitPolicy(exit_policy_return)
-    actual = self.controller.get_exit_policy()
-    self.assertEqual(expected, actual, 'handling CONF_CHANGED %s event should clear cache' % conf_key)
-    expected_get_info_call_count += 1
-    self.assertEqual(expected_get_info_call_count, get_info_mock.call_count, 'should call get_info again')
+      # handling the event should clear the cache
+      exit_policy_changed_event = ControlMessage.from_str("650-CONF_CHANGED\n650-%s\n650 OK" % conf_key, 'EVENT', normalize = True)
+      for listener in self.get_init_event_listeners(EventType.CONF_CHANGED):
+        listener(exit_policy_changed_event)
+      exit_policy_return = 'accept *:80'  # doesn't jive exactly with the event, but doesn't have to for the test
+      expected = ExitPolicy(exit_policy_return)
+      actual = self.controller.get_exit_policy()
+      self.assertEqual(expected, actual, 'handling CONF_CHANGED %s event should clear cache' % conf_key)
+      expected_get_info_call_count += 1
+      self.assertEqual(expected_get_info_call_count, get_info_mock.call_count, 'should call get_info again')
 
   @patch('stem.control.Controller.get_info')
   @patch('stem.control.Controller.get_conf')

@@ -355,6 +355,18 @@ IMMUTABLE_CONFIG_OPTIONS = set(map(stem.util.str_tools._to_unicode, map(str.lowe
   'User',
 ))))
 
+# torrc options that might affect tor's effective exit-policy/full
+
+CONFIG_OPTIONS_AFFECTING_EXIT_POLICY = (
+  'ExitRelay',
+  'ExitPolicy',
+  'ExitPolicyRejectPrivate',
+  'ExitPolicyRejectLocalInterfaces',
+  'IPv6Exit',
+)
+# precompute to make lookups faster
+_CONFIG_OPTIONS_AFFECTING_EXIT_POLICY = set(map(str.lower, CONFIG_OPTIONS_AFFECTING_EXIT_POLICY))
+
 LOG_CACHE_FETCHES = True  # provide trace level logging for cache hits
 
 # Configuration options that are fetched by a special key. The keys are
@@ -1072,7 +1084,9 @@ class Controller(BaseController):
       if self.is_caching_enabled():
         self._set_cache(dict((k, None) for k in event.config), 'getconf')
 
-        if 'exitpolicy' in [k.lower() for k in event.config.keys()]:
+        # clear cache for exit policy if any associated config changed
+        lower_changed_confs = [k.lower() for k in event.config.keys()]
+        if not _CONFIG_OPTIONS_AFFECTING_EXIT_POLICY.isdisjoint(lower_changed_confs):
           self._set_cache({'exit_policy': None})
 
     self.add_event_listener(_confchanged_listener, EventType.CONF_CHANGED)
@@ -2406,7 +2420,8 @@ class Controller(BaseController):
 
           to_cache[param] = value
 
-          if param == 'exitpolicy':
+          # clear cache for exit policy if any associated config changed
+          if param in _CONFIG_OPTIONS_AFFECTING_EXIT_POLICY:
             self._set_cache({'exit_policy': None})
           elif 'hidden' in param:
             self._set_cache({'hidden_service_conf': None})
