@@ -268,6 +268,7 @@ class TestController(unittest.TestCase):
       self.assertEqual(version, test.tor_version())
 
   @test.require.controller
+  @test.require.online
   def test_get_exit_policy(self):
     """
     Test for get_exit_policy() of a non-exit relay.
@@ -280,6 +281,7 @@ class TestController(unittest.TestCase):
       self.assertEquals(expected_nonexit_policy, controller.get_exit_policy())
 
   @test.require.controller
+  @test.require.online
   def test_get_exit_policy_default(self):
     """
     Sanity test for get_exit_policy(). We have the default policy (no
