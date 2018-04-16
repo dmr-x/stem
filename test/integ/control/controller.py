@@ -278,6 +278,11 @@ class TestController(unittest.TestCase):
 
     runner = test.runner.get_runner()
     with runner.get_tor_controller() as controller:
+      # sometimes tor will fully bootstrap without knowing its address
+      # this check makes the test more stable
+      if not controller.get_info('address', None):
+        self.skipTest("(don't yet know address)")
+
       self.assertEquals(expected_nonexit_policy, controller.get_exit_policy())
 
   @test.require.controller
@@ -324,6 +329,11 @@ class TestController(unittest.TestCase):
 
     runner = test.runner.get_runner()
     with runner.get_tor_controller() as controller:
+      # sometimes tor will fully bootstrap without knowing its address
+      # this check makes the test more stable
+      if not controller.get_info('address', None):
+        self.skipTest("(don't yet know address)")
+
       # we must first transition our tor process into an exit relay
       # save conf for reverting
       oldconf = runner.get_torrc_contents()
