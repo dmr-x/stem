@@ -134,6 +134,17 @@ class TestDescriptorDownloader(unittest.TestCase):
     self.assertEqual('moria1', list(reply)[0].nickname)
     self.assertEqual(5, len(reply.reply_headers))
 
+    # test some reply headers
+
+    self.assertEqual('identity', reply.reply_headers.get('content-encoding'))
+
+    # getting headers should be case insensitive
+    self.assertEqual('identity', reply.reply_headers.get('CoNtEnT-ENCODING'))
+
+    # request a header that isn't present
+    self.assertEqual(None, reply.reply_headers.get('no-such-header'))
+    self.assertEqual('default', reply.reply_headers.get('no-such-header', 'default'))
+
   @patch(URL_OPEN, _dirport_mock(TEST_DESCRIPTOR))
   def test_using_dirport(self):
     """
